@@ -1,0 +1,106 @@
+1.可以在js文件中引入js以及css，如果要引入css，需要使用css-loader!，这样才可以进行打包，如果还想显示出来，那么需要使用style-loader!
+	引用的方式有两种，可以直接在require引用的前面加入，或则在命令行中加入
+	webpack有很多的命令行工具，可以自己去看文档进行了解。比如自己进行打包，--watch，这样每次我们进行改动的时候就会自己进行打包
+2.webpack.config.js是webpack默认的配置文件
+	module.exports = {
+		entry: './src/script/main.js',
+		output: {
+			path: './dist/js',
+			filename :'bundle.js'
+		}
+	}
+	之后运行webpack就会去执行这默认配置文件，如果默认配置文件修改了名字的话，则运行不起来，除非执行--config 文件名 才可以
+	是可以在package.json中修改script来运行默认的执行命令
+3.如果entry中使用的是一个key和value的对象的话，如果需要分别打包的话，就需要在output中加入[name]来进行区分，其中我觉得很重要的就是[hash]和[chunkhash]
+	这两个hash值可以来告诉我这个文件是否进行了修改，这样在上线的时候我就可以使用修改过的js了，很棒
+    两个不相干的js文件进行合并的话就需要在entry中使用数组，然后包含两个对象就好了
+    如果没有用[name]，那么生成的bundle.js就是下一个覆盖了上一个
+ 4.自动生成的html页面（很棒）
+ 	通过html-webpack-plugin插件来进行自动生成页面
+    自动生成的页面里面包含了output中的js文件，这样就可以每次都引用不同hash的js文件了
+    在实际的入口html文件中其实就可以不需要引用js文件了，因为在打包的html中会把webpack.config.js中的js文件给放在打包html中的相应位置
+    var htmlWebPackPlugin=require('html-webpack-plugin');
+
+    module.exports = {
+		entry: {
+			main: './src/script/main.js',
+			a: './src/script/a.js'
+		},
+		output: {
+			path: './dist',
+			filename :'js/[name]-[chunkhash].js'
+		},
+		plugins: {
+			new htmlWebpackPlugin({
+				filename: 'index-[hash].html' //一般指定的页面都是固定的，只是只要改成一样的文件名字就可以了，要不然就是默认的index
+				template: 'index.html' // 用实际的html作为模板，关联上
+				inject: 'head' //放在头部
+			})
+		}
+	}
+5.自动生成html页面2（很棒）
+	i)通过ejs模板引擎可以直接在html页面中进行赋值<% %>（=代表赋值，没有=代表js），可以把htmlWebpackPlugin中的内容都赋值给前端（想知道什么参数可以去自己网上找）
+	例子：比如希望在head中引入一个文件，body中也引入一个文件，那么可以inject:false,然后直接在html中使用scr='<% =htmlWebpackPlugin.files.chunks.main.entry %>'这样就可以引入进行了
+	ii)上线，我希望使用http：//baidu.com这样的公开地址的话，可以在output中添加publicPath: 'http://baidu.com/'，这样引用的js就可以从这里找
+	iii)如果想压缩html页面
+		在nwe htmlWebpackPlugin中minify:{removeComments:true,collapseWhitespace:true}，这样就可以进行压缩和消除注释了
+6.自动生成html页面3（很棒）
+	i) 生成多一个页面，可以在数组中plugins中继续new htmlWebpackPlugin，然后生成不同的页面，注意js的引入，可以通过chunks和excludeChunks来进行js的筛选
+	ii) 如何在html中嵌入js，htmlWebpackPlugin是没有调用的方法的，但是给出了解决方案，通过webpack自带的函数进行嵌入
+		compilation.assets[htmlWebpackPlugin.files.chunks.main.entry.substr(htmlWebpackPlugin.files.publicPath.length)];就可以嵌入了
+			使用substr是为了不带前面的http://baidu.com
+7.loader的使用介绍，使用babel-loader把es6转换浏览器能看懂的js
+	在module.exports={
+		entry:...
+		output:...
+		plugins:...
+		module:{
+			loaders:[
+				{
+					test:/.\.js$/, //对js结尾的文件进行loader
+					loader:'babel', //进行es6转换操作
+					exclude:'./ng_modules/', //除这个文件内的都进行操作，这样就可以减少解析的速度了
+					include:'./src', //这个文件内的都进行操作
+					query:{
+						presets:['latest'] //对es的一些语法，也可以填写 '2016'这些的，latest代表最近的，所有的
+					}
+				}
+			]
+		}
+	}
+	有可能exclude、include没有起作用，因为路径问题，为了解决这个，可以使用node.js带的绝对路径api
+	var path=require('path');
+	path.resolve(__dirname,'路径')
+8.loader css的引用
+	在module的loaders中添加loader:'style-loader!css-loader?importLoders=1!postcss-loader'
+	i)执行顺序是从右到左，当然也可以使用loaders数组来表示，也是从最后面开始
+	ii)参数可以使用query，当然也可以使用get请求这种加？号的
+	iii)postcss-loader是为了解决比如多个浏览器兼容前缀什么的，插件中还可以用插件，比如postcss-loader就有autoprefixer这个插件来进行浏览器的前缀自动添加
+		module同级，postcss:{
+			require('autoprefixer')({
+				browers:['last 5 version']
+			})
+		}
+	iiii)css-loader?importLoaders作用就是在css中@import另外的css，可能postcss-loader不起作用，可以使用这个让其有作用
+	iiiii)处理lses或则sass，原理一样test匹配规则，然后加上loader的东西
+		注意点：postcss放在css后面和less前面，如果less中使用了@import，不需要使用参数也可以进行使用
+9.处理模板文件
+	ejs或则字符串等，加入test匹配一下，然后加载各自的loader然后运行起来，不懂可以百度下
+10.处理图片
+{
+
+                test: /\.(png|jpg|gif|svg)$/i,
+
+                loaders:[
+
+                    'url-loader?limit=1000&name=assets/[name]-[hash:5].[ext]',
+
+                    'image-webpack-loader' //压缩
+
+                ]
+
+            }
+	file-loader 一般都是hash加上图片后缀，也可以自己改变下[name]-[hash:5].[ext]
+		最好不要使用相对路径，这样打包可能会有问题，如果需要使用可以用函数包裹起来
+	url-loader 可以设置大小，在小于多少的情况下直接变成base64嵌入在相应的位置
+	image-loader 对图片进行压缩
